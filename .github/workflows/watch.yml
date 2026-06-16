@@ -25,6 +25,8 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python run_analyze.py
+      - name: Suggest watchlist
+        run: python run_suggest.py --add 20
       - name: Watch
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -34,6 +36,6 @@ jobs:
         run: |
           git config user.name  "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add -A data report.html watch_report.html watchlist.json
+          git add -A
           git commit -m "auto update" || echo "no changes"
           git push
