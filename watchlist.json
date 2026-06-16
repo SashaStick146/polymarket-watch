@@ -1,0 +1,84 @@
+{
+  "wallets": [
+    {
+      "address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+      "label": "Scary-Edible (PnL $726,030)"
+    },
+    {
+      "address": "0xfe787d2da716d60e8acff57fb87eb13cd4d10319",
+      "label": "Glaring-Salt (PnL $462,678)"
+    },
+    {
+      "address": "0x27abdfc9393c72a6330a3be987da4b46c726e521",
+      "label": "Wise-Keyboard (PnL $299,573)"
+    },
+    {
+      "address": "0x2d6ac4f70307102ac46e9e6ded67f3838ddf8add",
+      "label": "Hospitable-Dame (PnL $79,763)"
+    },
+    {
+      "address": "0xcf7379b4b891c06d88807f6f70efa75378120215",
+      "label": "Sophisticated-Bicycle (PnL $64,130)"
+    },
+    {
+      "address": "0xe9076a87c5ed90ef16e6fe6529c943baeca0cff6",
+      "label": "All-Peasant-Drug (PnL $44,454)"
+    },
+    {
+      "address": "0x228b8d11eba89bf1c554f8879a9293b7106daf4c",
+      "label": "Adorable-Acquaintance (PnL $39,637)"
+    },
+    {
+      "address": "0xbddf61af533ff524d27154e589d2d7a81510c684",
+      "label": "Unique-Congressperson (PnL $23,032)"
+    },
+    {
+      "address": "0x53757615de1c42b83f893b79d4241a009dc2aeea",
+      "label": "smart (PnL $18,669)"
+    },
+    {
+      "address": "0x3561190a250fbf7cede1a83db23006c33eebf1b7",
+      "label": "Grotesque-Campaigning (PnL $8,524)"
+    },
+    {
+      "address": "0xc5187cb669690150643ba2f9aac6b7d98d212594",
+      "label": "Spirited-Priest (PnL $8,326)"
+    },
+    {
+      "address": "0xc0f89d4e30b3ab40ab1f1979ebdcf8a02c39ae2e",
+      "label": "Potable-Scaffold (PnL $5,112)"
+    },
+    {
+      "address": "0x00c8ef6895e2fb38b538cac8c08edd6b82289ccd",
+      "label": "smart (PnL $3,072)"
+    },
+    {
+      "address": "0x206191d01c411a5b346d11a2df2d463a356b8ec9",
+      "label": "Hospitable-Maestro (PnL $2,433)"
+    },
+    {
+      "address": "0xb0d62e7959377b18fd63b772c74147724e0e7475",
+      "label": "Clueless-Arrest (PnL $2,002)"
+    },
+    {
+      "address": "0x751a2b86cab503496efd325c8344e10159349ea1",
+      "label": "Tremendous-Closet (PnL $0)"
+    },
+    {
+      "address": "0xae2b0aaea325a32870f56ff19df3b87acaa190ea",
+      "label": "Crowded-Jackal (PnL $0)"
+    },
+    {
+      "address": "0x67542c3219b37fd1610aad290676ff91cdbfe3bc",
+      "label": "Boring-Musician (PnL $0)"
+    },
+    {
+      "address": "0xdcd669c506a938bae9269a84b8bd2bdb220484cd",
+      "label": "Creamy-Beech (PnL $0)"
+    },
+    {
+      "address": "0xadc2efbf97ce7b25f7a638aabdba196c657cd1c9",
+      "label": "Fatal-Pottery (PnL $0)"
+    }
+  ]
+}
