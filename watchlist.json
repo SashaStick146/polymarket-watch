@@ -79,6 +79,30 @@
     {
       "address": "0xadc2efbf97ce7b25f7a638aabdba196c657cd1c9",
       "label": "Fatal-Pottery (PnL $0)"
+    },
+    {
+      "address": "0x9703676286b93c2eca71ca96e8757104519a69c2",
+      "label": "Ironclad-Housework (PnL $1,269,716)"
+    },
+    {
+      "address": "0x32b484581fc5606de9c1e43af4636b6be9bc8b21",
+      "label": "Faithful-Jazz (PnL $211,500)"
+    },
+    {
+      "address": "0xb2eef663d87af3ced2c9017e735041caaa659bdc",
+      "label": "Useless-Watcher (PnL $18,156)"
+    },
+    {
+      "address": "0x14e72e19ea2f6e2be41504dd3268184ebe5fa32c",
+      "label": "Victorious-Tritone (PnL $7,781)"
+    },
+    {
+      "address": "0x1eaf5d5f822dc5211c25b5839e5b7aa70f319bf0",
+      "label": "Reckless-Silence (PnL $3,593)"
+    },
+    {
+      "address": "0x2e78d7a77df765928de65f17196671fa83f2067e",
+      "label": "Impure-Roundabout (PnL $1,698)"
     }
   ]
 }
