@@ -8,7 +8,7 @@ def main():
     conn = db.connect()
     results, cluster_pairs = analyze.score_wallets(conn)
     path = report.render(results, cluster_pairs)
-    alerts.send_alert(results)
+    alerts.send_alert(results, threshold=30)
     print(f"Проанализировано кошельков: {len(results)}")
     print(f"Отчёт сохранён: {path}")
     print("\nТоп-10 по баллу подозрительности:")
