@@ -111,6 +111,10 @@
     {
       "address": "0xf0318c32136c2db7fec88b84869aee6a1106c80c",
       "label": "Homely-Gosling (PnL $11,577)"
+    },
+    {
+      "address": "0x204f72f35326db932158cba6adff0b9a1da95e14",
+      "label": "Frail-Possible (PnL $6,367)"
     }
   ]
 }
