@@ -1,4 +1,4 @@
-"""HTML-отчёты: основной (подозрительные + киты + качество) и список наблюдения."""
+"""HTML-отчёты: основной (подозрительные + эдж + связки) и список наблюдения."""
 import time, html
 from pathlib import Path
 
@@ -13,8 +13,9 @@ def _bar(value: float) -> str:
             f'background:{color}"></div><span>{pct}</span></div>')
 
 
-def _pct(v):
-    return f"{v:.0%}" if isinstance(v, (int, float)) else "—"
+def _pct(v): return f"{v:.0%}" if isinstance(v, (int, float)) else "—"
+def _edge(v): return f"{v:+.0%}" if isinstance(v, (int, float)) else "—"
+def _price(v): return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
 
 
 def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = REPORT_PATH) -> Path:
@@ -31,30 +32,24 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
             f"<td>{r['n_trades']}</td><td>${r['volume']:,.0f}</td><td>{r['n_markets']}</td>"
             f"<td>{r['lifespan_days']:.0f} дн</td><td class='reasons'>{reasons}</td></tr>")
 
-    whales = sorted(results, key=lambda r: -r.get("volume", 0))[:25]
-    whales_html = []
-    for r in whales:
+    # Таблица «Обыгрывают рынок»: сортировка по ЭДЖУ (винрейт − цена входа),
+    # только у кого хватает закрытых позиций. Фермеры (цена ~0.99) сюда не попадают.
+    edged = [r for r in results if isinstance(r.get("pos_edge"), (int, float))
+             and (r.get("pos_n_resolved") or 0) >= 8]
+    edged.sort(key=lambda r: -r["pos_edge"])
+    edge_html = []
+    for r in edged[:25]:
         wallet = r["wallet"]; link = f"https://polymarket.com/profile/{wallet}"
         pseudo = html.escape(r.get("pseudonym") or "—")
-        cons = r.get("pos_consistency")
-        top1 = r.get("pos_top1_share")
-        ppd = r.get("pos_pnl_per_day")
-        span = r.get("pos_span_days")
-        cons_cell = _pct(cons)
-        best_cell = (f"{top1:.0%}" if isinstance(top1, (int, float)) else "—")
-        if r.get("one_hit"): best_cell = "⚠ " + best_cell
-        ppd_cell = (f"${ppd:,.0f}" if isinstance(ppd, (int, float)) else "—")
-        span_cell = (f"{span} дн" if span else "—")
-        pnl = r.get("pos_pnl")
-        pnl_str = f"${pnl:,.0f}" if isinstance(pnl, (int, float)) else "—"
         rn = r.get("pos_recent_n"); rw = r.get("pos_recent_wins")
         recent_cell = (f"{rw}/{rn} ({(rw/rn):.0%})" if rn else "—")
-        whales_html.append(
+        pnl = r.get("pos_pnl"); pnl_str = f"${pnl:,.0f}" if isinstance(pnl, (int, float)) else "—"
+        edge_html.append(
             f"<tr><td><a href='{link}' target='_blank'>{pseudo}</a></td>"
-            f"<td>${r.get('volume', 0):,.0f}</td><td>${r.get('max_trade', 0):,.0f}</td>"
-            f"<td>{_pct(r.get('pos_winrate'))}</td><td>{_pct(r.get('pos_roi'))}</td>"
-            f"<td>{pnl_str}</td><td>{recent_cell}</td><td>{cons_cell}</td><td>{best_cell}</td>"
-            f"<td>{ppd_cell}</td><td>{span_cell}</td></tr>")
+            f"<td><b>{_edge(r.get('pos_edge'))}</b></td><td>{_pct(r.get('pos_winrate'))}</td>"
+            f"<td>{_price(r.get('pos_avg_entry'))}</td><td>{recent_cell}</td>"
+            f"<td>{_pct(r.get('pos_roi'))}</td><td>{pnl_str}</td>"
+            f"<td>{r.get('pos_n_resolved') or 0}</td><td>${r.get('volume', 0):,.0f}</td></tr>")
 
     pairs_html = []
     for a, b, c in cluster_pairs[:40]:
@@ -76,7 +71,8 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
   th,td {{ text-align:left; padding:8px 10px; border-bottom:1px solid #23252b; vertical-align:top; }}
   th {{ color:#9aa0a6; font-weight:600; }}
   code {{ color:#8ab4f8; font-size:12px; }} a {{ color:#8ab4f8; text-decoration:none; }}
-  .reasons {{ color:#cfd2d6; max-width:340px; }}
+  b {{ color:#5fd38a; }}
+  .reasons {{ color:#cfd2d6; max-width:360px; }}
   .bar {{ position:relative; width:120px; height:18px; background:#1c1e24; border-radius:4px; }}
   .fill {{ height:100%; border-radius:4px; }}
   .bar span {{ position:absolute; right:6px; top:0; font-size:11px; line-height:18px; color:#fff; }}
@@ -86,18 +82,18 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
   <h1>🔎 Polymarket Watch — подозрительные аккаунты</h1>
   <div class="sub">Сформирован: {ts} · в рейтинге: {min(top, len(results))} из {len(results)}</div>
   <div class="note">⚠️ Высокий балл — повод присмотреться, а НЕ доказательство нарушения.
-  «Везунчики» с прибылью от одной сделки автоматически понижены.</div>
+  Главный признак навыка — ЭДЖ (обыгрывает рынок), а не объём и не «фермерский» винрейт на ставках по 0.99.</div>
   <table>
     <tr><th>Балл</th><th>Аккаунт</th><th>Сделок</th><th>Оборот</th><th>Рынков</th><th>Жизнь</th><th>Почему в списке</th></tr>
     {''.join(rows_html)}
   </table>
-  <h2>🐋 Киты и качество прибыли</h2>
-  <div class="sub">Стабильность = насколько прибыль размазана по сделкам (выше = мастерство).
-  «1 сделка» = доля прибыли от лучшего входа (⚠ = почти всё с одной сделки, везение).</div>
+  <h2>🎯 Обыгрывают рынок (эдж против толпы)</h2>
+  <div class="sub">Эдж = винрейт − средняя цена входа. Высокий эдж при НИЗКОЙ цене входа =
+  угадывает чаще, чем подразумевает рынок (играет против толпы). «Фермеры» со ставками по 0.99 сюда не попадают.</div>
   <table>
-    <tr><th>Аккаунт</th><th>Оборот</th><th>Макс. ставка</th><th>Винрейт</th><th>ROI</th>
-        <th>PnL</th><th>Посл.50</th><th>Стабильн.</th><th>1 сделка</th><th>$/день</th><th>Срок</th></tr>
-    {''.join(whales_html) or '<tr><td colspan=11>Нет данных.</td></tr>'}
+    <tr><th>Аккаунт</th><th>Эдж</th><th>Винрейт</th><th>Ср. цена входа</th><th>Посл.50</th>
+        <th>ROI</th><th>PnL</th><th>Закрытых</th><th>Оборот</th></tr>
+    {''.join(edge_html) or '<tr><td colspan=9>Пока недостаточно данных (нужно ≥8 закрытых позиций у кошелька).</td></tr>'}
   </table>
   <h2>🔗 Возможные связки аккаунтов (синхронные входы)</h2>
   <table>
@@ -148,5 +144,3 @@ def render_watch(watch_results: list, out_path: Path = WATCH_REPORT_PATH) -> Pat
 </div></body></html>"""
     out_path.write_text(doc, encoding="utf-8")
     return out_path
-
-
