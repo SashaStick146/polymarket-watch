@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Анализ + отчёт + журнал помеченных + Telegram только про новых."""
-import os
-import time
-import html
-import logging
+"""Анализ + отчёт + журнал помеченных + Telegram только про новых (с деталями)."""
+import os, time, html, logging
 from pathlib import Path
-
 from src import db, analyze, report
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
-
-THRESHOLD = 30  # с какого балла аккаунт считается «помеченным»
+THRESHOLD = 30
 FLAGGED_REPORT = Path(__file__).resolve().parent / "flagged_report.html"
 
 
@@ -20,16 +15,14 @@ def ensure_flagged_table(conn):
             wallet TEXT PRIMARY KEY, pseudonym TEXT,
             first_ts INTEGER, first_score REAL, first_winrate REAL, first_pnl REAL,
             last_ts INTEGER, last_score REAL, last_winrate REAL, last_pnl REAL,
-            reasons TEXT)"""
-    )
+            reasons TEXT)""")
     conn.commit()
 
 
 def telegram(text):
     token = os.getenv("TELEGRAM_TOKEN"); chat = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat:
-        logging.info("Telegram не настроен — пропускаю алерт.")
-        return
+        logging.info("Telegram не настроен — пропускаю алерт."); return
     import requests
     try:
         requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
@@ -39,34 +32,26 @@ def telegram(text):
         logging.warning("Не удалось отправить алерт: %s", e)
 
 
-def _wr(v):
-    return f"{v:.0%}" if isinstance(v, (int, float)) else "н/д"
-
-
-def _pnl(v):
-    return f"${v:,.0f}" if isinstance(v, (int, float)) else "—"
+def _wr(v): return f"{v:.0%}" if isinstance(v, (int, float)) else "н/д"
+def _pnl(v): return f"${v:,.0f}" if isinstance(v, (int, float)) else "—"
 
 
 def update_flagged(conn, results, now):
     new_items = []
     for r in results:
-        if r["score"] < THRESHOLD:
-            continue
-        wr = r.get("pos_winrate"); pnl = r.get("pos_pnl")
-        reasons = "; ".join(r["reasons"])
+        if r["score"] < THRESHOLD: continue
+        wr = r.get("pos_winrate"); pnl = r.get("pos_pnl"); reasons = "; ".join(r["reasons"])
         row = conn.execute("SELECT wallet FROM flagged WHERE wallet=?", (r["wallet"],)).fetchone()
         if row is None:
-            conn.execute(
-                """INSERT INTO flagged (wallet, pseudonym, first_ts, first_score,
-                   first_winrate, first_pnl, last_ts, last_score, last_winrate,
-                   last_pnl, reasons) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            conn.execute("""INSERT INTO flagged (wallet, pseudonym, first_ts, first_score,
+                first_winrate, first_pnl, last_ts, last_score, last_winrate, last_pnl, reasons)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["wallet"], r.get("pseudonym") or "", now, r["score"], wr, pnl,
                  now, r["score"], wr, pnl, reasons))
             new_items.append(r)
         else:
-            conn.execute(
-                """UPDATE flagged SET last_ts=?, last_score=?, last_winrate=?,
-                   last_pnl=?, pseudonym=?, reasons=? WHERE wallet=?""",
+            conn.execute("""UPDATE flagged SET last_ts=?, last_score=?, last_winrate=?,
+                last_pnl=?, pseudonym=?, reasons=? WHERE wallet=?""",
                 (now, r["score"], wr, pnl, r.get("pseudonym") or "", reasons, r["wallet"]))
     conn.commit()
     return new_items
@@ -82,18 +67,15 @@ def render_flagged(conn, out_path=FLAGGED_REPORT):
         flagged_date = time.strftime("%Y-%m-%d", time.gmtime(int(r["first_ts"] or 0)))
         wr_cell = f"{_wr(r['first_winrate'])} → {_wr(r['last_winrate'])}"
         pnl_cell = f"{_pnl(r['first_pnl'])} → {_pnl(r['last_pnl'])}"
-        status = "—"
-        fp, lp = r["first_pnl"], r["last_pnl"]
+        status = "—"; fp, lp = r["first_pnl"], r["last_pnl"]
         if isinstance(fp, (int, float)) and isinstance(lp, (int, float)):
             if lp > fp + 1: status = "📈 заработал"
             elif lp < fp - 1: status = "📉 потерял"
             else: status = "≈ без изменений"
         reasons = html.escape(r["reasons"] or "—")
-        trs.append(
-            f"<tr><td><a href='{link}' target='_blank'>{pseudo}</a></td>"
+        trs.append(f"<tr><td><a href='{link}' target='_blank'>{pseudo}</a></td>"
             f"<td>{flagged_date}</td><td>{r['first_score']:.0f} → {r['last_score']:.0f}</td>"
-            f"<td>{wr_cell}</td><td>{pnl_cell}</td><td>{status}</td>"
-            f"<td>{reasons}</td></tr>")
+            f"<td>{wr_cell}</td><td>{pnl_cell}</td><td>{status}</td><td>{reasons}</td></tr>")
     body = "".join(trs) or "<tr><td colspan=7>Пока никого не помечали.</td></tr>"
     doc = f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
@@ -131,18 +113,24 @@ def main():
     if new_items:
         lines = [f"🔎 Новые подозрительные аккаунты: {len(new_items)}\n"]
         for r in new_items:
+            nres = r.get("pos_n_resolved") or 0
+            rn = r.get("pos_recent_n"); rw = r.get("pos_recent_wins")
+            recent = f"посл.{rn}: {rw} побед ({(rw/rn):.0%})" if rn else "посл.: н/д"
             anomalies = "; ".join(r["reasons"]) or "—"
             lines.append(
-                f"• {r.get('pseudonym') or r['wallet'][:10]} — балл {r['score']:.0f}, "
-                f"винрейт {_wr(r.get('pos_winrate'))}\n  аномалии: {anomalies}\n"
+                f"• {r.get('pseudonym') or r['wallet'][:10]} — балл {r['score']:.0f}\n"
+                f"  винрейт {_wr(r.get('pos_winrate'))} (рынков: {nres}) · {recent}\n"
+                f"  сделок в базе: {r.get('n_trades')}\n"
+                f"  аномалии: {anomalies}\n"
                 f"  https://polymarket.com/profile/{r['wallet']}")
         telegram("\n".join(lines))
 
-    print(f"Проанализировано кошельков: {len(results)}. Новых помеченных: {len(new_items)}.")
-    print("Топ-10 по баллу:")
+    print(f"Проанализировано: {len(results)}. Новых помеченных: {len(new_items)}.")
     for r in results[:10]:
-        print(f"  {r['score']:5.1f}  {(r.get('pseudonym') or r['wallet'][:10]):<18}  "
-              f"винрейт {_wr(r.get('pos_winrate'))}  | " + "; ".join(r['reasons'][:2]))
+        rn = r.get("pos_recent_n"); rw = r.get("pos_recent_wins")
+        recent = f"посл.{rn}:{rw}" if rn else "—"
+        print(f"  {r['score']:5.1f}  {(r.get('pseudonym') or r['wallet'][:10]):<18} "
+              f"вр {_wr(r.get('pos_winrate'))} {recent}  | " + "; ".join(r['reasons'][:2]))
 
 
 if __name__ == "__main__":
