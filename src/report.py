@@ -1,4 +1,4 @@
-"""HTML-отчёты: основной (подозрительные кошельки) и по списку наблюдения."""
+"""HTML-отчёты: основной (подозрительные + киты + качество) и список наблюдения."""
 import time, html
 from pathlib import Path
 
@@ -11,6 +11,10 @@ def _bar(value: float) -> str:
     color = "#d64545" if pct >= 60 else "#e0883a" if pct >= 35 else "#3a7bd5"
     return (f'<div class="bar"><div class="fill" style="width:{pct}%;'
             f'background:{color}"></div><span>{pct}</span></div>')
+
+
+def _pct(v):
+    return f"{v:.0%}" if isinstance(v, (int, float)) else "—"
 
 
 def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = REPORT_PATH) -> Path:
@@ -27,19 +31,25 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
             f"<td>{r['n_trades']}</td><td>${r['volume']:,.0f}</td><td>{r['n_markets']}</td>"
             f"<td>{r['lifespan_days']:.0f} дн</td><td class='reasons'>{reasons}</td></tr>")
 
-    def fmt_pct(v): return f"{v:.0%}" if isinstance(v, (int, float)) else "—"
     whales = sorted(results, key=lambda r: -r.get("volume", 0))[:25]
     whales_html = []
     for r in whales:
         wallet = r["wallet"]; link = f"https://polymarket.com/profile/{wallet}"
         pseudo = html.escape(r.get("pseudonym") or "—")
-        wr = r.get("pos_winrate"); roi = r.get("pos_roi"); pnl = r.get("pos_pnl")
-        nres = r.get("pos_n_resolved") or 0
+        top1 = r.get("pos_top1_share"); ppd = r.get("pos_pnl_per_day"); span = r.get("pos_span_days")
+        cons_cell = _pct(r.get("pos_consistency"))
+        best_cell = (f"{top1:.0%}" if isinstance(top1, (int, float)) else "—")
+        if r.get("one_hit"): best_cell = "⚠ " + best_cell
+        ppd_cell = (f"${ppd:,.0f}" if isinstance(ppd, (int, float)) else "—")
+        span_cell = (f"{span} дн" if span else "—")
+        pnl = r.get("pos_pnl")
         pnl_str = f"${pnl:,.0f}" if isinstance(pnl, (int, float)) else "—"
         whales_html.append(
             f"<tr><td><a href='{link}' target='_blank'>{pseudo}</a></td>"
             f"<td>${r.get('volume', 0):,.0f}</td><td>${r.get('max_trade', 0):,.0f}</td>"
-            f"<td>{fmt_pct(wr)}</td><td>{fmt_pct(roi)}</td><td>{pnl_str}</td><td>{nres}</td></tr>")
+            f"<td>{_pct(r.get('pos_winrate'))}</td><td>{_pct(r.get('pos_roi'))}</td>"
+            f"<td>{pnl_str}</td><td>{cons_cell}</td><td>{best_cell}</td>"
+            f"<td>{ppd_cell}</td><td>{span_cell}</td></tr>")
 
     pairs_html = []
     for a, b, c in cluster_pairs[:40]:
@@ -54,7 +64,7 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
 <title>Polymarket Watch</title>
 <style>
   body {{ font-family: system-ui, sans-serif; margin:0; background:#0e0f13; color:#e8e8ea; }}
-  .wrap {{ max-width:1100px; margin:0 auto; padding:24px; }}
+  .wrap {{ max-width:1150px; margin:0 auto; padding:24px; }}
   h1 {{ font-size:22px; }} h2 {{ font-size:16px; margin-top:34px; }}
   .sub {{ color:#9aa0a6; font-size:13px; margin-bottom:20px; }}
   table {{ width:100%; border-collapse:collapse; font-size:13px; }}
@@ -71,16 +81,18 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
   <h1>🔎 Polymarket Watch — подозрительные аккаунты</h1>
   <div class="sub">Сформирован: {ts} · в рейтинге: {min(top, len(results))} из {len(results)}</div>
   <div class="note">⚠️ Высокий балл — повод присмотреться, а НЕ доказательство нарушения.
-  Аномалия может объясняться удачей или мастерством трейдера. Это список приоритетов для ручной проверки.</div>
+  «Везунчики» с прибылью от одной сделки автоматически понижены.</div>
   <table>
     <tr><th>Балл</th><th>Аккаунт</th><th>Сделок</th><th>Оборот</th><th>Рынков</th><th>Жизнь</th><th>Почему в списке</th></tr>
     {''.join(rows_html)}
   </table>
-  <h2>🐋 Киты — крупнейшие по обороту (умные деньги?)</h2>
-  <div class="sub">Смотри на сочетание: большой оборот + высокий винрейт/ROI.</div>
+  <h2>🐋 Киты и качество прибыли</h2>
+  <div class="sub">Стабильность = насколько прибыль размазана по сделкам (выше = мастерство).
+  «1 сделка» = доля прибыли от лучшего входа (⚠ = почти всё с одной сделки, везение).</div>
   <table>
-    <tr><th>Аккаунт</th><th>Оборот</th><th>Макс. ставка</th><th>Винрейт</th><th>ROI</th><th>PnL</th><th>Закрытых</th></tr>
-    {''.join(whales_html) or '<tr><td colspan=7>Нет данных.</td></tr>'}
+    <tr><th>Аккаунт</th><th>Оборот</th><th>Макс. ставка</th><th>Винрейт</th><th>ROI</th>
+        <th>PnL</th><th>Стабильн.</th><th>1 сделка</th><th>$/день</th><th>Срок</th></tr>
+    {''.join(whales_html) or '<tr><td colspan=10>Нет данных.</td></tr>'}
   </table>
   <h2>🔗 Возможные связки аккаунтов (синхронные входы)</h2>
   <table>
