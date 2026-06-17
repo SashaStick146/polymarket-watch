@@ -1,34 +1,42 @@
 """
-Аналитика и скоринг подозрительности.
+Аналитика и скоринг подозрительности (+ качество прибыли).
+Балл 0..100. Высокий балл — повод присмотреться, НЕ доказательство.
 
-По собранным сделкам и позициям считаем для каждого кошелька набор сигналов,
-затем общий балл 0..100. Чем выше — тем больше поводов присмотреться.
-
-ВАЖНО: высокий балл — НЕ доказательство нарушения, а приоритет для ручной
-проверки. Аномалия может объясняться удачей или мастерством трейдера.
-
-Сигналы: винрейт, ROI, «кит»/умные деньги (крупные ставки), систематический
-вход по «почти решённой» цене (>0.9), короткая жизнь при большом обороте,
-«замолчал после прибыли», быстрые BUY→SELL, синхронные входы (связки).
+КАЧЕСТВО ПРИБЫЛИ:
+  consistency — насколько прибыль размазана по многим сделкам (1 = стабильно).
+  one_hit — флаг «прибыль почти вся с 1 сделки»: такой кошелёк ПОНИЖАЕТСЯ.
+  pnl_per_day, span_days — скорость и срок набора прибыли.
 """
 import time
+from datetime import datetime
 from collections import defaultdict
 
-WEIGHTS = {"winrate": 22, "roi": 16, "big_bet": 16, "cluster": 14,
-           "late_high_conf": 10, "short_lifespan": 10, "flip_in_out": 8,
-           "dormant_after_win": 6}
+WEIGHTS = {"winrate": 20, "big_bet": 16, "cluster": 14, "roi": 14,
+           "consistency": 12, "late_high_conf": 8, "short_lifespan": 8,
+           "flip_in_out": 6, "dormant_after_win": 4}
 
 MIN_RESOLVED_FOR_WINRATE = 8
 MIN_TRADES = 3
 CLUSTER_WINDOW_SEC = 300
 CLUSTER_MIN_SHARED = 4
 FLIP_WINDOW_SEC = 1800
-MIN_HISTORY_DAYS = 5          # сигналы про «время жизни» — только при накопленной истории
-BIG_SINGLE_BET_USD = 15000    # одиночная ставка такого размера -> полный сигнал «кит»
-WHALE_VOLUME_USD = 80000      # суммарный оборот -> полный сигнал «кит»
+MIN_HISTORY_DAYS = 5
+BIG_SINGLE_BET_USD = 15000
+WHALE_VOLUME_USD = 80000
+ONE_HIT_SHARE = 0.70
+ONE_HIT_PENALTY = 0.55
 
 
 def _clip01(x): return max(0.0, min(1.0, x))
+
+
+def _days_between(d1, d2):
+    try:
+        a = datetime.strptime(d1[:10], "%Y-%m-%d")
+        b = datetime.strptime(d2[:10], "%Y-%m-%d")
+        return abs((b - a).days)
+    except Exception:
+        return 0
 
 
 def wallet_trade_stats(conn) -> dict:
@@ -53,13 +61,32 @@ def wallet_position_stats(conn) -> dict:
     rows = conn.execute(
         """SELECT wallet, COUNT(*) AS n_resolved,
                   SUM(CASE WHEN realized_pnl>0 THEN 1 ELSE 0 END) AS n_win,
-                  SUM(realized_pnl) AS pnl, SUM(initial_value) AS invested
+                  SUM(realized_pnl) AS pnl, SUM(initial_value) AS invested,
+                  MAX(realized_pnl) AS best,
+                  SUM(CASE WHEN realized_pnl>0 THEN realized_pnl ELSE 0 END) AS pos_sum,
+                  MIN(end_date) AS first_end, MAX(end_date) AS last_end
            FROM positions WHERE redeemable=1 GROUP BY wallet""").fetchall()
     out = {}
     for r in rows:
-        n = r["n_resolved"] or 0; invested = r["invested"] or 0
-        out[r["wallet"]] = {"n_resolved": n, "winrate": (r["n_win"]/n) if n else None,
-            "pnl": round(r["pnl"] or 0, 2), "roi": (r["pnl"]/invested) if invested > 0 else None}
+        n = r["n_resolved"] or 0
+        invested = r["invested"] or 0
+        pnl = r["pnl"] or 0
+        best = r["best"] or 0
+        pos_sum = r["pos_sum"] or 0
+        top1_share = (best / pos_sum) if pos_sum > 0 else None
+        consistency = (1 - top1_share) if top1_share is not None else None
+        span = _days_between(r["first_end"] or "", r["last_end"] or "")
+        pnl_per_day = (pnl / span) if span > 0 else None
+        out[r["wallet"]] = {
+            "n_resolved": n,
+            "winrate": (r["n_win"] / n) if n else None,
+            "pnl": round(pnl, 2),
+            "roi": (pnl / invested) if invested > 0 else None,
+            "top1_share": top1_share,
+            "consistency": consistency,
+            "span_days": span,
+            "pnl_per_day": round(pnl_per_day, 2) if pnl_per_day is not None else None,
+        }
     return out
 
 
@@ -112,12 +139,15 @@ def score_wallets(conn):
         p = pos.get(w, {})
         life = max((b["last_ts"] - b["first_ts"]) / 86400.0, 0.0)
         since = (now - b["last_ts"]) / 86400.0
+        nres = p.get("n_resolved", 0)
         sig = {}
         wr = p.get("winrate")
-        sig["winrate"] = _clip01((wr - 0.55) / 0.40) if (wr is not None and p.get("n_resolved", 0) >= MIN_RESOLVED_FOR_WINRATE) else 0.0
+        sig["winrate"] = _clip01((wr - 0.55) / 0.40) if (wr is not None and nres >= MIN_RESOLVED_FOR_WINRATE) else 0.0
         roi = p.get("roi")
-        sig["roi"] = _clip01(roi / 1.0) if (roi is not None and p.get("n_resolved", 0) >= MIN_RESOLVED_FOR_WINRATE) else 0.0
+        sig["roi"] = _clip01(roi / 1.0) if (roi is not None and nres >= MIN_RESOLVED_FOR_WINRATE) else 0.0
         sig["big_bet"] = max(_clip01(b["max_trade"] / BIG_SINGLE_BET_USD), _clip01(b["volume"] / WHALE_VOLUME_USD))
+        cons = p.get("consistency")
+        sig["consistency"] = _clip01(cons) if (cons is not None and nres >= MIN_RESOLVED_FOR_WINRATE) else 0.0
         sig["late_high_conf"] = _clip01(b["share_high_conf"])
         if ready:
             short = 1.0 if (life <= 30 and b["volume"] >= 1000) else _clip01((30 - life) / 30.0) * _clip01(b["volume"] / 5000.0)
@@ -131,18 +161,25 @@ def score_wallets(conn):
         sig["cluster"] = cs.get(w, 0.0)
         score = sum(WEIGHTS[k] * v for k, v in sig.items())
 
+        top1 = p.get("top1_share")
+        one_hit = (top1 is not None and top1 > ONE_HIT_SHARE and nres >= 2)
+        if one_hit:
+            score *= ONE_HIT_PENALTY
+
         reasons = []
-        if sig["winrate"] > 0.5: reasons.append(f"винрейт {wr:.0%} на {p.get('n_resolved')} рынках")
+        if sig["winrate"] > 0.5: reasons.append(f"винрейт {wr:.0%} на {nres} рынках")
         if sig["roi"] > 0.4 and roi is not None: reasons.append(f"ROI {roi:.0%}")
+        if sig["consistency"] > 0.5: reasons.append(f"стабильная прибыль (лучшая сделка {top1:.0%})")
         if sig["big_bet"] > 0.4: reasons.append(f"крупные ставки: макс ${b['max_trade']:,.0f}, оборот ${b['volume']:,.0f}")
         if sig["late_high_conf"] > 0.4: reasons.append(f"{b['share_high_conf']:.0%} входов по цене >0.9")
         if sig["short_lifespan"] > 0.4: reasons.append(f"жизнь {life:.0f} дн при обороте ${b['volume']:.0f}")
         if sig["dormant_after_win"] > 0.3: reasons.append(f"молчит {since:.0f} дн после прибыли ${p.get('pnl'):.0f}")
         if sig["flip_in_out"] > 0.3: reasons.append(f"{flips.get(w)} быстрых заходов-выходов")
         if sig["cluster"] > 0.3: reasons.append("синхронные входы с другими кошельками")
+        if one_hit: reasons.append(f"⚠ прибыль почти вся с 1 сделки ({top1:.0%}) — понижено")
 
         res.append({**b, **{f"pos_{k}": v for k, v in p.items()},
             "lifespan_days": round(life, 1), "days_since_last": round(since, 1),
-            "signals": sig, "score": round(score, 1), "reasons": reasons})
+            "one_hit": one_hit, "signals": sig, "score": round(score, 1), "reasons": reasons})
     res.sort(key=lambda x: -x["score"])
     return res, cluster_pairs
