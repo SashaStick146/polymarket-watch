@@ -1,11 +1,18 @@
 """
 Аналитика и скоринг подозрительности (+ качество прибыли).
-Балл 0..100. Высокий балл — повод присмотреться, НЕ доказательство.
 
-КАЧЕСТВО ПРИБЫЛИ:
-  consistency — насколько прибыль размазана по многим сделкам (1 = стабильно).
-  one_hit — флаг «прибыль почти вся с 1 сделки»: такой кошелёк ПОНИЖАЕТСЯ.
-  pnl_per_day, span_days — скорость и срок набора прибыли.
+Балл 0..100 по каждому кошельку. Высокий балл — повод присмотреться,
+НЕ доказательство нарушения.
+
+Сигналы: винрейт, ROI, «кит» (крупные ставки), связки (синхронные входы),
+стабильность прибыли, вход по «почти решённой» цене, короткая жизнь,
+быстрые BUY→SELL, «замолчал после прибыли».
+
+КАЧЕСТВО ПРИБЫЛИ (пункт «одна удачная сделка нам не подходит»):
+  • consistency (стабильность) = насколько прибыль размазана по многим
+    сделкам, а не сделана одним входом. 1.0 — очень стабильно, 0 — всё с одной.
+  • one_hit — флаг «прибыль почти вся с 1 сделки»: такой кошелёк ПОНИЖАЕТСЯ.
+  • pnl_per_day и span_days — скорость и срок набора прибыли.
 """
 import time
 from datetime import datetime
@@ -23,8 +30,8 @@ FLIP_WINDOW_SEC = 1800
 MIN_HISTORY_DAYS = 5
 BIG_SINGLE_BET_USD = 15000
 WHALE_VOLUME_USD = 80000
-ONE_HIT_SHARE = 0.70
-ONE_HIT_PENALTY = 0.55
+ONE_HIT_SHARE = 0.70       # если >70% прибыли с одной сделки — «везунчик»
+ONE_HIT_PENALTY = 0.55     # во столько раз режем балл такому кошельку
 
 
 def _clip01(x): return max(0.0, min(1.0, x))
@@ -66,6 +73,17 @@ def wallet_position_stats(conn) -> dict:
                   SUM(CASE WHEN realized_pnl>0 THEN realized_pnl ELSE 0 END) AS pos_sum,
                   MIN(end_date) AS first_end, MAX(end_date) AS last_end
            FROM positions WHERE redeemable=1 GROUP BY wallet""").fetchall()
+    recent = {}
+    rrows = conn.execute(
+        """SELECT wallet,
+                  COUNT(*) AS rn_total,
+                  SUM(CASE WHEN realized_pnl>0 THEN 1 ELSE 0 END) AS rn_wins
+           FROM (SELECT wallet, realized_pnl,
+                        ROW_NUMBER() OVER (PARTITION BY wallet ORDER BY end_date DESC) AS rn
+                 FROM positions WHERE redeemable=1)
+           WHERE rn <= 50 GROUP BY wallet""").fetchall()
+    for rr in rrows:
+        recent[rr["wallet"]] = (rr["rn_total"] or 0, rr["rn_wins"] or 0)
     out = {}
     for r in rows:
         n = r["n_resolved"] or 0
@@ -77,6 +95,7 @@ def wallet_position_stats(conn) -> dict:
         consistency = (1 - top1_share) if top1_share is not None else None
         span = _days_between(r["first_end"] or "", r["last_end"] or "")
         pnl_per_day = (pnl / span) if span > 0 else None
+        out_extra = recent.get(r["wallet"], (0, 0))
         out[r["wallet"]] = {
             "n_resolved": n,
             "winrate": (r["n_win"] / n) if n else None,
@@ -86,6 +105,9 @@ def wallet_position_stats(conn) -> dict:
             "consistency": consistency,
             "span_days": span,
             "pnl_per_day": round(pnl_per_day, 2) if pnl_per_day is not None else None,
+            "recent_n": out_extra[0],
+            "recent_wins": out_extra[1],
+            "recent_winrate": (out_extra[1] / out_extra[0]) if out_extra[0] else None,
         }
     return out
 
@@ -161,6 +183,7 @@ def score_wallets(conn):
         sig["cluster"] = cs.get(w, 0.0)
         score = sum(WEIGHTS[k] * v for k, v in sig.items())
 
+        # «одна удачная сделка» — понижаем
         top1 = p.get("top1_share")
         one_hit = (top1 is not None and top1 > ONE_HIT_SHARE and nres >= 2)
         if one_hit:
