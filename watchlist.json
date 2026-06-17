@@ -103,6 +103,10 @@
     {
       "address": "0x2e78d7a77df765928de65f17196671fa83f2067e",
       "label": "Impure-Roundabout (PnL $1,698)"
+    },
+    {
+      "address": "0x84cfffc3f16dcc353094de30d4a45226eccd2f63",
+      "label": "Agitated-Bricklaying (PnL $2,819)"
     }
   ]
 }
