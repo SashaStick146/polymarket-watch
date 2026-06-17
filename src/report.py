@@ -36,19 +36,24 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
     for r in whales:
         wallet = r["wallet"]; link = f"https://polymarket.com/profile/{wallet}"
         pseudo = html.escape(r.get("pseudonym") or "—")
-        top1 = r.get("pos_top1_share"); ppd = r.get("pos_pnl_per_day"); span = r.get("pos_span_days")
-        cons_cell = _pct(r.get("pos_consistency"))
+        cons = r.get("pos_consistency")
+        top1 = r.get("pos_top1_share")
+        ppd = r.get("pos_pnl_per_day")
+        span = r.get("pos_span_days")
+        cons_cell = _pct(cons)
         best_cell = (f"{top1:.0%}" if isinstance(top1, (int, float)) else "—")
         if r.get("one_hit"): best_cell = "⚠ " + best_cell
         ppd_cell = (f"${ppd:,.0f}" if isinstance(ppd, (int, float)) else "—")
         span_cell = (f"{span} дн" if span else "—")
         pnl = r.get("pos_pnl")
         pnl_str = f"${pnl:,.0f}" if isinstance(pnl, (int, float)) else "—"
+        rn = r.get("pos_recent_n"); rw = r.get("pos_recent_wins")
+        recent_cell = (f"{rw}/{rn} ({(rw/rn):.0%})" if rn else "—")
         whales_html.append(
             f"<tr><td><a href='{link}' target='_blank'>{pseudo}</a></td>"
             f"<td>${r.get('volume', 0):,.0f}</td><td>${r.get('max_trade', 0):,.0f}</td>"
             f"<td>{_pct(r.get('pos_winrate'))}</td><td>{_pct(r.get('pos_roi'))}</td>"
-            f"<td>{pnl_str}</td><td>{cons_cell}</td><td>{best_cell}</td>"
+            f"<td>{pnl_str}</td><td>{recent_cell}</td><td>{cons_cell}</td><td>{best_cell}</td>"
             f"<td>{ppd_cell}</td><td>{span_cell}</td></tr>")
 
     pairs_html = []
@@ -91,8 +96,8 @@ def render(results: list, cluster_pairs: list, top: int = 80, out_path: Path = R
   «1 сделка» = доля прибыли от лучшего входа (⚠ = почти всё с одной сделки, везение).</div>
   <table>
     <tr><th>Аккаунт</th><th>Оборот</th><th>Макс. ставка</th><th>Винрейт</th><th>ROI</th>
-        <th>PnL</th><th>Стабильн.</th><th>1 сделка</th><th>$/день</th><th>Срок</th></tr>
-    {''.join(whales_html) or '<tr><td colspan=10>Нет данных.</td></tr>'}
+        <th>PnL</th><th>Посл.50</th><th>Стабильн.</th><th>1 сделка</th><th>$/день</th><th>Срок</th></tr>
+    {''.join(whales_html) or '<tr><td colspan=11>Нет данных.</td></tr>'}
   </table>
   <h2>🔗 Возможные связки аккаунтов (синхронные входы)</h2>
   <table>
@@ -143,3 +148,5 @@ def render_watch(watch_results: list, out_path: Path = WATCH_REPORT_PATH) -> Pat
 </div></body></html>"""
     out_path.write_text(doc, encoding="utf-8")
     return out_path
+
+
