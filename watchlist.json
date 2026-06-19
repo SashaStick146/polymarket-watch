@@ -119,6 +119,10 @@
     {
       "address": "0x03805a13a0b3e058f55f6c6af95389d4f431073d",
       "label": "Velvety-Burn (PnL $114,743)"
+    },
+    {
+      "address": "0x2c335066fe58fe9237c3d3dc7b275c2a034a0563",
+      "label": "Substantial-Service (PnL $263,692)"
     }
   ]
 }
