@@ -135,6 +135,10 @@
     {
       "address": "0x5f659bccbc353dbf7bcdffdee73bee60bb482036",
       "label": "Rash-Copying (PnL $36,364)"
+    },
+    {
+      "address": "0xcd65c3279408a33866a9129bed6943064cb6ee96",
+      "label": "Frosty-Layer-Numismatist (PnL $162,154)"
     }
   ]
 }
