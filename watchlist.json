@@ -143,6 +143,10 @@
     {
       "address": "0x8fbb3c32496d4bcff8f456c3342f90edaaa09a17",
       "label": "Harmful-Gymnast (PnL $22,969)"
+    },
+    {
+      "address": "0xecbeba24a9e7d8fc3091db367f2578e911ac42ff",
+      "label": "Sweet-Rag (PnL $38,524)"
     }
   ]
 }
